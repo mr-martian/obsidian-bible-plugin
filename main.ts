@@ -10,7 +10,7 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
 	mySetting: 'default'
 }
 
-export default class MyPlugin extends Plugin {
+class MyPlugin extends Plugin {
 	settings: MyPluginSettings;
 
 	async onload() {
@@ -131,4 +131,53 @@ class SampleSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}));
 	}
+}
+
+import grc_data from './grc.json';
+
+export class GlossingModal extends Modal {
+	constructor(app: App, word) {
+		super(app);
+		let data = JSON.parse(word.getAttribute('data-word'));
+		this.setTitle(data.form);
+		this.contentEl.createEl('p', {text: data.lemma + ' ' + data.upos});
+		let ul = this.contentEl.createEl('ul')
+		for (let key of Object.keys(data.feats)) {
+			ul.createEl('li', {text: key + ' ' + data.feats[key]});
+		}
+	}
+}
+
+export default class PassagePlugin extends Plugin {
+	word_hover(event) {
+		new GlossingModal(this.app, event.target).open();
+	}
+  async onload() {
+      this.registerMarkdownCodeBlockProcessor('passage', (source, el, ctx) => {
+		  const pat = /(\w+) (\d+):(\d+)(?:-(\d+))?/g;
+		  let m = pat.exec(source);
+		  let book = m[1];
+		  let chapter = parseInt(m[2]);
+		  let v1 = parseInt(m[3]);
+		  let v2 = (m[4] === undefined ? v1 : parseInt(m[4]));
+		  const seq = grc_data.order[book][chapter-1];
+		  for (let v = v1; v <= v2 && v < seq.length; v++) {
+			  const sid = seq[v];
+			  if (!sid) continue;
+			  const line = el.createEl('p');
+			  grc_data.sentences[sid].forEach((word) => {
+				  let span = line.createEl('span', {
+					  text: word.form,
+					  title: word.lemma,
+					  cls: 'grc-word',
+				  });
+				  span.setAttribute('data-word', JSON.stringify(word));
+				  span.addEventListener('click', (e) => this.word_hover(e));
+				  if (word.misc.SpaceAfter != 'No') {
+					  line.createEl('span', {text: ' '});
+				  }
+			  });
+		  }
+	  });
+  }
 }
